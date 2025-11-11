@@ -1,0 +1,22 @@
+[package]
+name = "pacmap"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure Rust implementation of PaCMAP (Pairwise Controlled Manifold Approximation)"
+keywords = ["dimensionality-reduction", "machine-learning", "manifold-learning", "pacmap"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+ndarray = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[features]
+default = []
+serde = ["dep:serde"]

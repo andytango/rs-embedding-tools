@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```
-//! use scanner_embeddings::pacmap::PacmapBuilder;
+//! use pacmap::PacmapBuilder;
 //! use ndarray::Array2;
 //!
 //! let data = Array2::from_shape_vec((100, 50), (0..5000).map(|x| x as f64).collect()).unwrap();

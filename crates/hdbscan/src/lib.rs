@@ -17,7 +17,7 @@
 //! # Example
 //!
 //! ```
-//! use scanner_embeddings::hdbscan::HdbscanBuilder;
+//! use hdbscan::HdbscanBuilder;
 //! use ndarray::Array2;
 //!
 //! let data = Array2::from_shape_vec((5, 2), vec![
