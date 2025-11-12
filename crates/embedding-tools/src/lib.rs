@@ -41,7 +41,8 @@ pub struct EmbeddingInput {
 /// Configuration for the embedding processing pipeline
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PipelineConfig {
-    /// Number of components for dimensionality reduction (default: 2)
+    /// Number of components for dimensionality reduction (default: 3)
+    /// We use 3D as an intermediate step before clustering for better separation
     #[serde(default = "default_n_components")]
     pub n_components: usize,
 
@@ -78,7 +79,7 @@ impl Default for PipelineConfig {
     }
 }
 
-fn default_n_components() -> usize { 2 }
+fn default_n_components() -> usize { 3 }
 fn default_n_iterations() -> usize { 450 }
 fn default_min_cluster_size() -> usize { 5 }
 fn default_min_samples() -> usize { 5 }
@@ -131,6 +132,8 @@ impl EmbeddingPipeline {
     }
 
     /// Process embeddings through the pipeline
+    /// Step 1: Reduce high-dimensional data to 3D using PACMAP
+    /// Step 2: Cluster the 3D data using HDBSCAN
     pub fn process(&self, data: Array2<f64>) -> Result<EmbeddingOutput, EmbeddingToolsError> {
         let n_samples = data.nrows();
         let original_dimensions = data.ncols();
@@ -139,7 +142,8 @@ impl EmbeddingPipeline {
             return Err(EmbeddingToolsError::InvalidInput("Empty data provided".into()));
         }
 
-        // Dimensionality reduction with PACMAP
+        // Step 1: Dimensionality reduction with PACMAP to 3D
+        // Reducing to 3D provides better cluster separation than 2D while still being computationally efficient
         let n_neighbors = self.config.n_neighbors
             .unwrap_or_else(|| (10.min(n_samples - 1)).max(1));
 
@@ -151,7 +155,7 @@ impl EmbeddingPipeline {
 
         let reduced_data = pacmap.fit_transform(&data)?;
 
-        // Clustering with HDBSCAN (optional)
+        // Step 2: Clustering with HDBSCAN on the 3D reduced data (optional)
         let (clusters, n_clusters, n_noise) = if self.config.skip_clustering {
             (None, None, None)
         } else {
@@ -160,6 +164,7 @@ impl EmbeddingPipeline {
                 .min_samples(self.config.min_samples)
                 .build();
 
+            // Cluster on the reduced 3D data for better performance and accuracy
             let cluster_labels = hdbscan.fit_predict(&reduced_data)?;
 
             // Convert to Option<usize> format and calculate statistics
@@ -212,6 +217,9 @@ impl EmbeddingPipeline {
 }
 
 /// WASM binding for processing embeddings
+/// This performs a two-stage process:
+/// 1. Reduce high-dimensional embeddings to 3D using PACMAP
+/// 2. Cluster the 3D points using HDBSCAN
 #[wasm_bindgen]
 pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
     // Set up panic hook for better error messages in WASM
@@ -249,7 +257,7 @@ pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
     let data_array = Array2::from_shape_vec((n_samples, n_features), flat_data)
         .map_err(|e| JsValue::from_str(&format!("Failed to create array: {}", e)))?;
 
-    // Process through pipeline
+    // Process through pipeline (reduce to 3D, then cluster)
     let pipeline = EmbeddingPipeline::new(input.config);
     let output = pipeline.process(data_array)
         .map_err(|e| JsValue::from_str(&format!("Processing error: {}", e)))?;
@@ -260,6 +268,7 @@ pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
 }
 
 /// WASM binding for simple dimensionality reduction without clustering
+/// Default is to reduce to 3D for better separation
 #[wasm_bindgen]
 pub fn reduce_dimensions(input_js: JsValue, n_components: Option<usize>) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
@@ -272,9 +281,9 @@ pub fn reduce_dimensions(input_js: JsValue, n_components: Option<usize>) -> Resu
         return Err(JsValue::from_str("Input data is empty"));
     }
 
-    // Create configuration for reduction only
+    // Create configuration for reduction only (default to 3D)
     let config = PipelineConfig {
-        n_components: n_components.unwrap_or(2),
+        n_components: n_components.unwrap_or(3),
         skip_clustering: true,
         ..Default::default()
     };
@@ -381,7 +390,7 @@ mod tests {
         let output = pipeline.process(data_array).unwrap();
 
         assert_eq!(output.reduced_data.len(), n_samples);
-        assert_eq!(output.reduced_data[0].len(), 2);
+        assert_eq!(output.reduced_data[0].len(), 3); // Now expecting 3D output
         assert!(output.clusters.is_some());
         assert_eq!(output.metadata.n_samples, n_samples);
         assert_eq!(output.metadata.original_dimensions, n_features);
@@ -418,28 +427,52 @@ mod tests {
     #[test]
     fn test_custom_dimensions() {
         let data = generate_test_data();
-        let config = PipelineConfig {
-            n_components: 3,
+
+        // Test with 2D output
+        let config_2d = PipelineConfig {
+            n_components: 2,
             skip_clustering: true,
             ..Default::default()
         };
 
-        let input = EmbeddingInput { data, config };
+        let input_2d = EmbeddingInput { data: data.clone(), config: config_2d };
 
-        let flat_data: Vec<f64> = input.data
+        let flat_data_2d: Vec<f64> = input_2d.data
             .iter()
             .flatten()
             .map(|&x| x as f64)
             .collect();
 
-        let n_samples = input.data.len();
-        let n_features = input.data[0].len();
-        let data_array = Array2::from_shape_vec((n_samples, n_features), flat_data).unwrap();
+        let n_samples = input_2d.data.len();
+        let n_features = input_2d.data[0].len();
+        let data_array_2d = Array2::from_shape_vec((n_samples, n_features), flat_data_2d).unwrap();
 
-        let pipeline = EmbeddingPipeline::new(input.config);
-        let output = pipeline.process(data_array).unwrap();
+        let pipeline_2d = EmbeddingPipeline::new(input_2d.config);
+        let output_2d = pipeline_2d.process(data_array_2d).unwrap();
 
-        assert_eq!(output.reduced_data[0].len(), 3);
+        assert_eq!(output_2d.reduced_data[0].len(), 2);
+
+        // Test with default 3D output
+        let config_3d = PipelineConfig {
+            n_components: 3,
+            skip_clustering: true,
+            ..Default::default()
+        };
+
+        let input_3d = EmbeddingInput { data, config: config_3d };
+
+        let flat_data_3d: Vec<f64> = input_3d.data
+            .iter()
+            .flatten()
+            .map(|&x| x as f64)
+            .collect();
+
+        let data_array_3d = Array2::from_shape_vec((n_samples, n_features), flat_data_3d).unwrap();
+
+        let pipeline_3d = EmbeddingPipeline::new(input_3d.config);
+        let output_3d = pipeline_3d.process(data_array_3d).unwrap();
+
+        assert_eq!(output_3d.reduced_data[0].len(), 3);
     }
 }
 
