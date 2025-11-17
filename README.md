@@ -37,15 +37,16 @@ HDBSCAN (Hierarchical Density-Based Spatial Clustering) for finding clusters of 
 - Robust to parameter changes
 - Handles varying cluster densities
 
-### 3. `embedding-tools` - WASM-Compatible Pipeline
+### 3. `embedding-tools` - Node.js & WASM-Compatible Pipeline
 Located in `crates/embedding-tools/`
 
-WebAssembly bindings combining both algorithms into an easy-to-use pipeline.
+Native Node.js addon and WebAssembly bindings combining both algorithms into an easy-to-use pipeline.
 
 **Features:**
 - Full pipeline API (reduction + clustering)
 - Separate functions for each step
-- Browser and Node.js compatible
+- Node.js native addon (default) and WASM support
+- Multi-platform pre-built binaries
 - Configurable processing options
 
 ## Quick Start
@@ -139,27 +140,97 @@ let clusterer = HdbscanBuilder::new()
 let labels = clusterer.fit_predict(&reduced).unwrap();
 ```
 
+### Node.js Usage (Recommended)
+
+Install from npm:
+
+```bash
+npm install embedding-tools
+```
+
+The package includes pre-built native binaries for:
+- macOS (x64 & Apple Silicon)
+- Linux (x64 & arm64, glibc only - **no musl support**)
+- Windows (x64 & arm64)
+
+**Note:** This package does **not** support musl-based Linux distributions (like Alpine Linux) due to Rust compatibility issues. Please use glibc-based distributions (Ubuntu, Debian, CentOS, etc.).
+
+JavaScript/TypeScript usage:
+
+```javascript
+const { processEmbeddings, reduceDimensions, clusterData } = require('embedding-tools');
+
+// Full pipeline (reduction + clustering)
+const data = [
+  [1.0, 2.0, 3.0],
+  [1.1, 2.1, 3.1],
+  [10.0, 11.0, 12.0],
+  // ... more embeddings
+];
+
+const config = {
+  n_components: 3,         // Reduce to 3D (default)
+  min_cluster_size: 5,     // Minimum cluster size
+  n_neighbors: 10,         // PACMAP neighbors
+  n_iterations: 450        // PACMAP iterations
+};
+
+const result = processEmbeddings(data, config);
+console.log(result.reduced_data);  // [[x, y, z], ...]
+console.log(result.clusters);      // [0, 0, 1, null, ...] (null = noise)
+console.log(result.metadata);      // { n_clusters: 2, n_noise: 1, ... }
+
+// Or use individual functions
+const reduced = reduceDimensions(data, 2);  // Just reduction
+const clusters = clusterData(reduced, 5);   // Just clustering
+```
+
+TypeScript support:
+
+```typescript
+import { processEmbeddings, reduceDimensions, clusterData } from 'embedding-tools';
+
+interface PipelineConfig {
+  n_components?: number;
+  n_neighbors?: number;
+  n_iterations?: number;
+  min_cluster_size?: number;
+  min_samples?: number;
+  skip_clustering?: boolean;
+}
+
+const config: PipelineConfig = {
+  n_components: 3,
+  min_cluster_size: 5
+};
+
+const result = processEmbeddings(data, config);
+```
+
 ### WebAssembly Usage
 
-Build the WASM module:
+For browser environments, build the WASM module:
 
 ```bash
 # Install wasm-pack if needed
 curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-# Build for web
+# Build for web with WASM feature
 cd crates/embedding-tools
-wasm-pack build --target web
+cargo build --target wasm32-unknown-unknown --no-default-features --features wasm
+wasm-pack build --target web --no-default-features --features wasm
 ```
 
-JavaScript usage:
+JavaScript usage in browser:
 
 ```javascript
-import { process_embeddings, reduce_dimensions, cluster_data } from 'embedding-tools';
+import init, { process_embeddings, reduce_dimensions, cluster_data } from 'embedding-tools';
+
+await init();
 
 // Full pipeline
 const input = {
-  data: [[1, 2, 3], [4, 5, 6], ...],  // Your embeddings
+  data: [[1, 2, 3], [4, 5, 6], ...],
   config: {
     n_components: 2,
     min_cluster_size: 5,

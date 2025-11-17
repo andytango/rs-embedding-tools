@@ -1,0 +1,46 @@
+# Source files
+crates/
+src/
+target/
+Cargo.toml
+Cargo.lock
+build.rs
+
+# Development files
+.github/
+.git/
+.gitignore
+scripts/
+test/
+tests/
+
+# Documentation (keep only README)
+docs/
+*.md
+!README.md
+
+# Build artifacts
+*.node
+!embedding-tools.*.node
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.travis.yml
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Misc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm

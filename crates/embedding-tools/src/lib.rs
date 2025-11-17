@@ -1,15 +1,23 @@
-//! WASM-compatible embedding processing tools
+//! Embedding processing tools for WASM and Node.js
 //!
 //! This crate provides a simplified pipeline for processing high-dimensional embeddings,
 //! including dimensionality reduction using PACMAP and clustering using HDBSCAN.
+//!
+//! The crate supports both WASM and Node.js N-API bindings via feature flags.
 
+#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
+
 use ndarray::Array2;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // Optional PCA module for additional dimensionality reduction
 pub mod pca;
+
+// Node.js N-API bindings (enabled by default)
+#[cfg(feature = "napi")]
+pub mod node;
 
 /// Error types for the embedding tools
 #[derive(Error, Debug)]
@@ -79,10 +87,18 @@ impl Default for PipelineConfig {
     }
 }
 
-fn default_n_components() -> usize { 3 }
-fn default_n_iterations() -> usize { 450 }
-fn default_min_cluster_size() -> usize { 5 }
-fn default_min_samples() -> usize { 5 }
+fn default_n_components() -> usize {
+    3
+}
+fn default_n_iterations() -> usize {
+    450
+}
+fn default_min_cluster_size() -> usize {
+    5
+}
+fn default_min_samples() -> usize {
+    5
+}
 
 /// Output data structure containing results from the pipeline
 #[derive(Serialize, Deserialize, Debug)]
@@ -139,12 +155,16 @@ impl EmbeddingPipeline {
         let original_dimensions = data.ncols();
 
         if n_samples == 0 {
-            return Err(EmbeddingToolsError::InvalidInput("Empty data provided".into()));
+            return Err(EmbeddingToolsError::InvalidInput(
+                "Empty data provided".into(),
+            ));
         }
 
         // Step 1: Dimensionality reduction with PACMAP to 3D
         // Reducing to 3D provides better cluster separation than 2D while still being computationally efficient
-        let n_neighbors = self.config.n_neighbors
+        let n_neighbors = self
+            .config
+            .n_neighbors
             .unwrap_or_else(|| (10.min(n_samples - 1)).max(1));
 
         let pacmap = pacmap::PacmapBuilder::new()
@@ -220,6 +240,7 @@ impl EmbeddingPipeline {
 /// This performs a two-stage process:
 /// 1. Reduce high-dimensional embeddings to 3D using PACMAP
 /// 2. Cluster the 3D points using HDBSCAN
+#[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
     // Set up panic hook for better error messages in WASM
@@ -242,24 +263,23 @@ pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
         if row.len() != n_features {
             return Err(JsValue::from_str(&format!(
                 "Inconsistent dimensions: row {} has {} features, expected {}",
-                i, row.len(), n_features
+                i,
+                row.len(),
+                n_features
             )));
         }
     }
 
     // Convert to ndarray
-    let flat_data: Vec<f64> = input.data
-        .into_iter()
-        .flatten()
-        .map(|x| x as f64)
-        .collect();
+    let flat_data: Vec<f64> = input.data.into_iter().flatten().map(|x| x as f64).collect();
 
     let data_array = Array2::from_shape_vec((n_samples, n_features), flat_data)
         .map_err(|e| JsValue::from_str(&format!("Failed to create array: {}", e)))?;
 
     // Process through pipeline (reduce to 3D, then cluster)
     let pipeline = EmbeddingPipeline::new(input.config);
-    let output = pipeline.process(data_array)
+    let output = pipeline
+        .process(data_array)
         .map_err(|e| JsValue::from_str(&format!("Processing error: {}", e)))?;
 
     // Serialize output
@@ -269,8 +289,12 @@ pub fn process_embeddings(input_js: JsValue) -> Result<JsValue, JsValue> {
 
 /// WASM binding for simple dimensionality reduction without clustering
 /// Default is to reduce to 3D for better separation
+#[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn reduce_dimensions(input_js: JsValue, n_components: Option<usize>) -> Result<JsValue, JsValue> {
+pub fn reduce_dimensions(
+    input_js: JsValue,
+    n_components: Option<usize>,
+) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
     // Parse input as simple 2D array
@@ -304,8 +328,12 @@ pub fn reduce_dimensions(input_js: JsValue, n_components: Option<usize>) -> Resu
 }
 
 /// WASM binding for clustering pre-reduced data
+#[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn cluster_data(input_js: JsValue, min_cluster_size: Option<usize>) -> Result<JsValue, JsValue> {
+pub fn cluster_data(
+    input_js: JsValue,
+    min_cluster_size: Option<usize>,
+) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
     // Parse input as 2D array
@@ -331,7 +359,8 @@ pub fn cluster_data(input_js: JsValue, min_cluster_size: Option<usize>) -> Resul
         .min_samples(min_cluster_size)
         .build();
 
-    let cluster_labels = hdbscan.fit_predict(&data_array)
+    let cluster_labels = hdbscan
+        .fit_predict(&data_array)
         .map_err(|e| JsValue::from_str(&format!("Clustering error: {}", e)))?;
 
     // Convert to Option<usize> format
@@ -376,11 +405,7 @@ mod tests {
             config: PipelineConfig::default(),
         };
 
-        let flat_data: Vec<f64> = input.data
-            .iter()
-            .flatten()
-            .map(|&x| x as f64)
-            .collect();
+        let flat_data: Vec<f64> = input.data.iter().flatten().map(|&x| x as f64).collect();
 
         let n_samples = input.data.len();
         let n_features = input.data[0].len();
@@ -406,11 +431,7 @@ mod tests {
 
         let input = EmbeddingInput { data, config };
 
-        let flat_data: Vec<f64> = input.data
-            .iter()
-            .flatten()
-            .map(|&x| x as f64)
-            .collect();
+        let flat_data: Vec<f64> = input.data.iter().flatten().map(|&x| x as f64).collect();
 
         let n_samples = input.data.len();
         let n_features = input.data[0].len();
@@ -435,13 +456,12 @@ mod tests {
             ..Default::default()
         };
 
-        let input_2d = EmbeddingInput { data: data.clone(), config: config_2d };
+        let input_2d = EmbeddingInput {
+            data: data.clone(),
+            config: config_2d,
+        };
 
-        let flat_data_2d: Vec<f64> = input_2d.data
-            .iter()
-            .flatten()
-            .map(|&x| x as f64)
-            .collect();
+        let flat_data_2d: Vec<f64> = input_2d.data.iter().flatten().map(|&x| x as f64).collect();
 
         let n_samples = input_2d.data.len();
         let n_features = input_2d.data[0].len();
@@ -459,13 +479,12 @@ mod tests {
             ..Default::default()
         };
 
-        let input_3d = EmbeddingInput { data, config: config_3d };
+        let input_3d = EmbeddingInput {
+            data,
+            config: config_3d,
+        };
 
-        let flat_data_3d: Vec<f64> = input_3d.data
-            .iter()
-            .flatten()
-            .map(|&x| x as f64)
-            .collect();
+        let flat_data_3d: Vec<f64> = input_3d.data.iter().flatten().map(|&x| x as f64).collect();
 
         let data_array_3d = Array2::from_shape_vec((n_samples, n_features), flat_data_3d).unwrap();
 

@@ -1,0 +1,65 @@
+{
+  "name": "embedding-tools",
+  "version": "0.1.0",
+  "description": "High-performance embedding processing tools with dimensionality reduction (PACMAP) and clustering (HDBSCAN) for Node.js",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "embedding-tools",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "aarch64-unknown-linux-gnu"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release --cargo-cwd crates/embedding-tools",
+    "build:debug": "napi build --platform --cargo-cwd crates/embedding-tools",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node test/test.js",
+    "universal": "napi universal",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  },
+  "packageManager": "npm@9.0.0",
+  "keywords": [
+    "embeddings",
+    "clustering",
+    "dimensionality-reduction",
+    "hdbscan",
+    "pacmap",
+    "machine-learning",
+    "native-addon",
+    "rust",
+    "napi"
+  ],
+  "author": "Andrew Hall <andrewhall@example.com>",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewhall/rs-embedding-tools"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "optionalDependencies": {
+    "embedding-tools-darwin-arm64": "0.1.0",
+    "embedding-tools-darwin-x64": "0.1.0",
+    "embedding-tools-linux-arm64-gnu": "0.1.0",
+    "embedding-tools-linux-x64-gnu": "0.1.0",
+    "embedding-tools-win32-arm64-msvc": "0.1.0",
+    "embedding-tools-win32-x64-msvc": "0.1.0"
+  }
+}
